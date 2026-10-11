@@ -431,8 +431,13 @@ pub const MENUS: [&str; 9] = ["File", "Edit", "Clip", "Sequence", "Markers", "Gr
 
 pub fn menu_items(app: &FilmcraftApp) -> Vec<MenuItem> {
     let mut v = menu_items_for(&app.session);
+    // The SimpleHub build carries no ArtCraft community links (the source on GitHub stays).
+    if cfg!(feature = "simplehub") {
+        v.retain(|it| !matches!(it.id.as_str(), "help.discord" | "help.website" | "help.appPage"));
+    }
     for it in &mut v {
-        it.label = app.ui.language.tr(&it.label).to_string();
+        // "FilmCraft on GitHub" names the repository, not the product.
+        it.label = if it.id == "help.github" { app.ui.language.tr(&it.label).to_string() } else { crate::branded(app.ui.language.tr(&it.label)) };
         match it.id.as_str() {
             "app.language.english" => it.checked = Some(app.ui.language == crate::i18n::Language::En),
             "app.language.japanese" => it.checked = Some(app.ui.language == crate::i18n::Language::Ja),

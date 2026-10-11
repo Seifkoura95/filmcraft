@@ -15,6 +15,17 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
+thread_local! {
+    /// URL of `web/audio-worklet.js`: next to the page by default; a host that serves the bundle
+    /// elsewhere (SimpleHub) sets it before creating the [`Handle`].
+    static WORKLET_URL: RefCell<String> = RefCell::new("audio-worklet.js".into());
+}
+
+/// Where the `AudioWorklet` script is loaded from (absolute, or relative to the page).
+pub fn set_worklet_url(url: String) {
+    WORKLET_URL.with(|u| *u.borrow_mut() = url);
+}
+
 /// Seconds of audio kept queued ahead of the worklet.
 const AHEAD_S: f64 = 0.25;
 /// Frames per posted block.
@@ -56,7 +67,8 @@ impl Handle {
         let weak = Rc::downgrade(&h.0);
         wasm_bindgen_futures::spawn_local(async move {
             let r: Result<web_sys::AudioWorkletNode, JsValue> = async {
-                JsFuture::from(ctx.audio_worklet()?.add_module("audio-worklet.js")?).await?;
+                let url = WORKLET_URL.with(|u| u.borrow().clone());
+                JsFuture::from(ctx.audio_worklet()?.add_module(&url)?).await?;
                 let o = web_sys::AudioWorkletNodeOptions::new();
                 o.set_number_of_inputs(0);
                 o.set_number_of_outputs(1);

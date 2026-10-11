@@ -31,7 +31,7 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) {
     let mut open = true;
     match d {
         Dialog::About => {
-            egui::Window::new("About FilmCraft")
+            egui::Window::new(crate::branded("About FilmCraft"))
                 .open(&mut open)
                 .collapsible(false)
                 .resizable(false)
@@ -407,6 +407,19 @@ fn about_tab(app: &mut FilmcraftApp, ui: &mut egui::Ui) {
     use crate::links;
     let t = app.tokens;
     ui.set_width(380.0);
+    if cfg!(feature = "simplehub") {
+        // SimpleHub build. FilmCraft is MIT OR Apache-2.0; the licence asks for attribution, and
+        // the ArtCraft wordmark and community links are left out (the marks are not open source).
+        ui.heading(crate::APP_NAME);
+        ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
+        ui.label("Video editing for SimpleHub: a non-linear editor with a multitrack timeline, effects, colour, captions and export.");
+        ui.add_space(10.0);
+        ui.label("Simple Film is built on FilmCraft, an open source project by storytold, under the MIT and Apache 2.0 licences.");
+        ui.hyperlink_to("github.com/storytold/filmcraft", links::GITHUB);
+        ui.add_space(10.0);
+        ui.label(egui::RichText::new("Fonts: Inter, Noto Serif and JetBrains Mono (SIL OFL 1.1).").small().color(t.text_dim));
+        return;
+    }
     // ArtCraft wordmark (first-party trademark, docs/brand/).
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), egui::Sense::hover());
     crate::brand::paint_wordmark(ui, egui::pos2(r.min.x, r.center().y), 20.0, app.ui.dark);

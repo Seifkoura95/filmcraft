@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Simple Film</title>
+  <!-- SimpleHub build of filmcraft-web. Only the generated .js and _bg.wasm plus audio-worklet.js are
+       shipped; SimpleHub mounts the app itself through `start_simple_film`. The crate is a cdylib (its one
+       artifact), so no data-bin; the outputs are named after the package. Build from this directory with:
+       trunk build --release --public-url /apps/film/ --filehash false --dist ../../dist/simplehub simplehub.html -->
+  <link data-trunk rel="rust" data-cargo-features="simplehub" data-wasm-opt="z" data-weak-refs />
+  <link data-trunk rel="copy-file" href="web/audio-worklet.js" />
+</head>
+<body></body>
+</html>

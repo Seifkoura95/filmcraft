@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use filmcraft_engine::Services;
 use filmcraft_media::reader::{ByteReader, MemReader, SharedReader};
+#[cfg(not(feature = "simplehub"))]
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
@@ -66,6 +67,7 @@ pub fn set_on_write(f: impl Fn(&str, &[u8]) + 'static) {
     FS.with(|fs| fs.borrow_mut().on_write = Some(Rc::new(f)));
 }
 
+#[cfg(not(feature = "simplehub"))]
 fn file_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
@@ -414,6 +416,7 @@ impl Services for WebServices {
 }
 
 /// Offer bytes as a browser download named `name`.
+#[cfg(not(feature = "simplehub"))]
 pub fn download(name: &str, data: &[u8]) -> Result<(), wasm_bindgen::JsValue> {
     let doc = web_sys::window().and_then(|w| w.document()).ok_or("no document")?;
     let blob = bytes_to_blob(data, "application/octet-stream")?;

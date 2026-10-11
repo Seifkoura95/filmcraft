@@ -43,7 +43,10 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
             app.ui.mode = crate::state::Mode::Edit;
         }
     }
-    // Community and project links.
+    // Community and project links (not in the SimpleHub build: no ArtCraft marks or links).
+    if cfg!(feature = "simplehub") {
+        return;
+    }
     let y = 90.0 + 150.0 + 36.0;
     // ArtCraft wordmark (first-party trademark, docs/brand/), then the section title.
     let logo = crate::brand::paint_wordmark(ui, rect.min + vec2(24.0, y), 15.0, app.ui.dark);

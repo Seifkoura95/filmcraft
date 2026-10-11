@@ -24,6 +24,8 @@ pub mod fs;
 pub mod import;
 pub mod opfs;
 pub mod recovery;
+#[cfg(feature = "simplehub")]
+pub mod simplehub;
 pub mod webcodecs;
 
 use std::cell::RefCell;
@@ -107,18 +109,29 @@ impl eframe::App for WebApp {
     }
 }
 
-fn query_flag(name: &str) -> bool {
-    web_sys::window().and_then(|w| w.location().search().ok()).and_then(|s| web_sys::UrlSearchParams::new_with_str(&s).ok()).is_some_and(|p| p.has(name))
+/// How the page hosts the app: the standalone page (`index.html`) or SimpleHub.
+pub(crate) struct Host {
+    /// Where a file the app writes goes (a saved project, an export, captions): a browser download
+    /// on the standalone page, the host's `save` inside SimpleHub.
+    pub on_write: Box<dyn Fn(&str, &[u8])>,
+    /// Wires the UI's file dialogs (`FilmcraftApp::hooks`).
+    pub install_hooks: Box<dyn FnOnce(&mut FilmcraftApp)>,
+    /// Open the demo project when nothing was recovered.
+    pub demo: bool,
+    /// CPU compositor even on WebGPU.
+    pub cpu: bool,
+    /// WebGL2 only.
+    pub webgl: bool,
+    /// Reopen the auto-saved snapshot of a session that ended with unsaved changes.
+    pub recover: bool,
+    /// Register the media kept in OPFS by earlier sessions.
+    pub restore_media: bool,
 }
 
-/// Entry point (called by the page's bootstrap script once the wasm module is instantiated).
-#[wasm_bindgen]
-pub async fn start(canvas_id: String) -> Result<(), JsValue> {
-    eframe::WebLogger::init(log::LevelFilter::Info).ok();
+/// Starts the app on `canvas` with `runner`; resolves once it runs. Shared by the standalone
+/// page's [`start`] and SimpleHub's [`simplehub::start_simple_film`].
+pub(crate) async fn boot(runner: &eframe::WebRunner, canvas: web_sys::HtmlCanvasElement, host: Host) -> Result<(), JsValue> {
     let t0 = web_time::Instant::now();
-    let doc = web_sys::window().and_then(|w| w.document()).ok_or("no document")?;
-    let canvas: web_sys::HtmlCanvasElement = doc.get_element_by_id(&canvas_id).ok_or("no canvas")?.dyn_into()?;
-
     let isolated = js_sys::Reflect::get(&js_sys::global(), &"crossOriginIsolated".into()).ok().and_then(|v| v.as_bool()).unwrap_or(false);
     // Frame rendering runs cooperatively on this thread. wasm threads need a cross-origin
     // isolated page *and* a build with atomics (nightly `build-std`); this build has none.
@@ -128,23 +141,19 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
     set_info("opfs", json!(opfs::available()));
 
     // Media kept in OPFS by earlier sessions come back under their paths (recovery).
-    let restored = if opfs::available() && !query_flag("fresh") { recovery::restore_media().await } else { 0 };
-    let recovered = if query_flag("fresh") || query_flag("norecover") { None } else { recovery::load_snapshot().await };
+    let restored = if opfs::available() && host.restore_media { recovery::restore_media().await } else { 0 };
+    let recovered = if host.recover { recovery::load_snapshot().await } else { None };
     webcodecs::probe().await;
 
     api::install()?;
-    import::install_drop_handlers()?;
 
-    let demo = !query_flag("empty");
+    let Host { on_write, install_hooks, demo, cpu, webgl, .. } = host;
     let mut web_options = eframe::WebOptions::default();
     // `?webgl`: WebGL2 only. The page reloads with it when starting on WebGPU fails (an adapter
     // whose device can't be created, a driver the browser rejects…); see `index.html`.
-    if query_flag("webgl")
-        && let eframe::egui_wgpu::WgpuSetup::CreateNew(c) = &mut web_options.wgpu_options.wgpu_setup
-    {
+    if webgl && let eframe::egui_wgpu::WgpuSetup::CreateNew(c) = &mut web_options.wgpu_options.wgpu_setup {
         c.instance_descriptor.backends = eframe::wgpu::Backends::GL;
     }
-    let runner = eframe::WebRunner::new();
     runner
         .start(
             canvas,
@@ -153,11 +162,7 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
                 CTX.with(|c| *c.borrow_mut() = Some(cc.egui_ctx.clone()));
                 let ctx = cc.egui_ctx.clone();
                 fs::set_on_data(move || ctx.request_repaint());
-                fs::set_on_write(|path, data| {
-                    if let Err(e) = fs::download(path, data) {
-                        log::warn!("download {path}: {e:?}");
-                    }
-                });
+                fs::set_on_write(on_write);
                 webcodecs::install();
                 let mut session = Session::new(Arc::new(fs::WebServices));
                 let mut toast = None;
@@ -176,7 +181,7 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
                     let _ = session.execute("file.openDemoProject", json!({}));
                 }
                 let mut app = FilmcraftApp::new(session);
-                import::install_hooks(&mut app);
+                install_hooks(&mut app);
                 let (tx, rx) = std::sync::mpsc::channel();
                 api::set_sender(tx);
                 app = app.with_control(rx);
@@ -189,7 +194,7 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
                 // composites on the CPU).
                 if let Some(rs) = cc.wgpu_render_state.clone()
                     && backend == Some(eframe::wgpu::Backend::BrowserWebGpu)
-                    && !query_flag("cpu")
+                    && !cpu
                 {
                     app.set_wgpu(rs);
                     set_info("compositor", json!("gpu"));
@@ -207,6 +212,38 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
         )
         .await?;
     set_info("startupMs", json!(t0.elapsed().as_secs_f64() * 1000.0));
+    Ok(())
+}
+
+#[cfg(not(feature = "simplehub"))]
+fn query_flag(name: &str) -> bool {
+    web_sys::window().and_then(|w| w.location().search().ok()).and_then(|s| web_sys::UrlSearchParams::new_with_str(&s).ok()).is_some_and(|p| p.has(name))
+}
+
+/// Entry point (called by the page's bootstrap script once the wasm module is instantiated).
+#[cfg(not(feature = "simplehub"))]
+#[wasm_bindgen]
+pub async fn start(canvas_id: String) -> Result<(), JsValue> {
+    eframe::WebLogger::init(log::LevelFilter::Info).ok();
+    let doc = web_sys::window().and_then(|w| w.document()).ok_or("no document")?;
+    let canvas: web_sys::HtmlCanvasElement = doc.get_element_by_id(&canvas_id).ok_or("no canvas")?.dyn_into()?;
+    import::install_drop_handlers()?;
+    let host = Host {
+        // Saving writes the file in memory and offers it as a download.
+        on_write: Box::new(|path, data| {
+            if let Err(e) = fs::download(path, data) {
+                log::warn!("download {path}: {e:?}");
+            }
+        }),
+        install_hooks: Box::new(import::install_hooks),
+        demo: !query_flag("empty"),
+        cpu: query_flag("cpu"),
+        webgl: query_flag("webgl"),
+        recover: !(query_flag("fresh") || query_flag("norecover")),
+        restore_media: !query_flag("fresh"),
+    };
+    let runner = eframe::WebRunner::new();
+    boot(&runner, canvas, host).await?;
     // keep the runner alive for the page's lifetime
     std::mem::forget(runner);
     if let Some(el) = doc.get_element_by_id("loading") {

@@ -37,6 +37,16 @@ use serde_json::{Value, json};
 
 pub use control::ControlRequest;
 use dock::PanelKind;
+
+/// The name shown to the user in titles, menus, message boxes and the About dialog.
+/// The `simplehub` feature builds the app as Simple Film inside SimpleHub.
+pub const APP_NAME: &str = if cfg!(feature = "simplehub") { "Simple Film" } else { "FilmCraft" };
+
+/// A UI string that names the product, with the name as built ([`APP_NAME`]): the i18n catalogs
+/// keep "FilmCraft" as it is, so the swap is applied after translation (`branded(lang.tr("…"))`).
+pub fn branded(s: &str) -> String {
+    if APP_NAME == "FilmCraft" { s.to_owned() } else { s.replace("FilmCraft", APP_NAME) }
+}
 use frames::{FrameKey, FrameServer, Target};
 use state::UiState;
 use theme::{ThemeKind, Tokens};
@@ -1419,7 +1429,7 @@ impl FilmcraftApp {
     fn error_window(&mut self, ctx: &egui::Context) {
         let Some(msg) = self.ui_error.clone() else { return };
         let mut close = false;
-        egui::Window::new("FilmCraft hit an error").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+        egui::Window::new(branded("FilmCraft hit an error")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
             ui.set_max_width(460.0);
             ui.label("Something went wrong while drawing the window. Your project is still open; save it to be safe.");
             ui.add_space(6.0);

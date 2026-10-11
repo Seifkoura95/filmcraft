@@ -10,7 +10,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use filmcraft_engine::Services;
-use filmcraft_ui_egui::{FilmcraftApp, RelinkHint};
+#[cfg(not(feature = "simplehub"))]
+use filmcraft_ui_egui::FilmcraftApp;
+use filmcraft_ui_egui::RelinkHint;
 use serde_json::{Value, json};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -153,9 +155,9 @@ pub fn take_files(files: Vec<web_sys::File>) {
     });
 }
 
-/// Files a picker returned: imported, or with a relink hint, the first one is registered under
-/// `/files/<name>` and the hint's command runs on it (#111).
-fn picked(files: Vec<web_sys::File>, relink: Option<RelinkHint>) {
+/// Files a picker (or the hosting page) returned: imported, or with a relink hint, the first one
+/// is registered under `/files/<name>` and the hint's command runs on it (#111).
+pub(crate) fn picked(files: Vec<web_sys::File>, relink: Option<RelinkHint>) {
     let Some(hint) = relink else { return take_files(files) };
     let Some(f) = files.into_iter().next() else { return };
     wasm_bindgen_futures::spawn_local(async move {
@@ -179,16 +181,19 @@ fn picked(files: Vec<web_sys::File>, relink: Option<RelinkHint>) {
     });
 }
 
+#[cfg(not(feature = "simplehub"))]
 fn has_fsa_picker() -> bool {
     web_sys::window().is_some_and(|w| js_sys::Reflect::has(&w, &"showOpenFilePicker".into()).unwrap_or(false))
 }
 
 /// Let the user pick files: `showOpenFilePicker` when available, else a file input.
+#[cfg(not(feature = "simplehub"))]
 pub fn pick(exts: &[&str], multiple: bool) {
     pick_then(exts, multiple, None);
 }
 
 /// [`pick`], handing the files to [`picked`]: a cancelled picker leaves nothing pending.
+#[cfg(not(feature = "simplehub"))]
 fn pick_then(exts: &[&str], multiple: bool, relink: Option<RelinkHint>) {
     let accept: Vec<String> = exts.iter().map(|e| format!(".{e}")).collect();
     if has_fsa_picker() {
@@ -230,10 +235,17 @@ fn pick_then(exts: &[&str], multiple: bool, relink: Option<RelinkHint>) {
 }
 
 /// Drop files anywhere on the page to import them (or open a project).
+#[cfg(not(feature = "simplehub"))]
 pub fn install_drop_handlers() -> Result<(), JsValue> {
     let w = web_sys::window().ok_or("no window")?;
+    install_drop_handlers_on(&w)
+}
+
+/// Drop files on `target` (the page, or inside SimpleHub the app's canvas) to import them (or
+/// open a project).
+pub fn install_drop_handlers_on(target: &web_sys::EventTarget) -> Result<(), JsValue> {
     let over = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| e.prevent_default());
-    w.add_event_listener_with_callback_and_bool("dragover", over.as_ref().unchecked_ref(), true)?;
+    target.add_event_listener_with_callback_and_bool("dragover", over.as_ref().unchecked_ref(), true)?;
     over.forget();
     let drop = Closure::<dyn FnMut(web_sys::DragEvent)>::new(|e: web_sys::DragEvent| {
         e.prevent_default();
@@ -242,12 +254,13 @@ pub fn install_drop_handlers() -> Result<(), JsValue> {
             take_files((0..list.length()).filter_map(|i| list.get(i)).collect());
         }
     });
-    w.add_event_listener_with_callback_and_bool("drop", drop.as_ref().unchecked_ref(), true)?;
+    target.add_event_listener_with_callback_and_bool("drop", drop.as_ref().unchecked_ref(), true)?;
     drop.forget();
     Ok(())
 }
 
 /// Wire the UI's file dialogs to the browser.
+#[cfg(not(feature = "simplehub"))]
 pub fn install_hooks(app: &mut FilmcraftApp) {
     // Pickers are asynchronous: the dialog hook starts the picker and returns nothing; the files
     // are imported when the user has chosen them.

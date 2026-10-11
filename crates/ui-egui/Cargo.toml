@@ -53,3 +53,8 @@ egui_kittest = { workspace = true, features = ["eframe", "wgpu"] }
 [build-dependencies]
 serde_json = { workspace = true }
 toml = "1"
+
+[features]
+# SimpleHub build: user-facing name "Simple Film", About dialog credits FilmCraft, no ArtCraft
+# marks or community links.
+simplehub = []
