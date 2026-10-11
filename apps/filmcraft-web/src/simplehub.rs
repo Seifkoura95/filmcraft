@@ -21,9 +21,9 @@
 //!
 //! An optional `theme` string on the bridge (`"dark"` or `"light"`) picks the UI theme the app
 //! starts with; `FilmHandle::set_theme` switches it while the app runs. Both map onto the app's
-//! own Settings ▸ Appearance ▸ Color Theme values (`"dark"` is the app's Dark theme, `"light"`
-//! its Light theme; the default Darkest stays when the bridge says nothing) without saving them
-//! as the user's preference.
+//! own Settings ▸ Appearance ▸ Color Theme values (`"dark"` is the app's Darkest theme, whose
+//! panels match the SimpleHub shell's window, `"light"` its Light theme) without saving them as
+//! the user's preference.
 
 use filmcraft_ui_egui::theme::ThemeKind;
 use filmcraft_ui_egui::{FilmcraftApp, RelinkHint};
@@ -61,13 +61,12 @@ impl FilmHandle {
     }
 }
 
-/// The bridge's theme names are the app's Color Theme setting values: `"dark"` is the Dark theme,
-/// `"light"` the Light one (`"darkest"`, the app's default, is accepted as well).
+/// `"dark"` (or the app's own name for it, `"darkest"`) is the Darkest theme, the app's default,
+/// whose `#1d1d1d` panels match the SimpleHub shell's window; `"light"` is the Light theme.
 fn parse_theme(theme: &str) -> Option<ThemeKind> {
     match theme.trim().to_ascii_lowercase().as_str() {
-        "dark" => Some(ThemeKind::Medium),
+        "dark" | "darkest" => Some(ThemeKind::Dark),
         "light" => Some(ThemeKind::Light),
-        "darkest" => Some(ThemeKind::Dark),
         _ => None,
     }
 }
