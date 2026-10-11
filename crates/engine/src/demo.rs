@@ -38,18 +38,21 @@ pub fn add_generator(p: &mut Project, pool: &MediaPool, src: GeneratorSource, na
     id
 }
 
+/// The demo project's name (and so its default file name): the product's name as built.
+const DEMO_NAME: &str = if cfg!(feature = "simplehub") { "Simple Film Demo" } else { "FilmCraft Demo" };
+
 /// Build the demo project. Returns (project, main sequence).
 pub fn demo_project(pool: &MediaPool) -> (Project, ItemId) {
     build_demo(pool).unwrap_or_else(|| {
         // Only reachable if the built-in items could not be placed: an empty demo, not a crash.
-        let mut p = Project::new("FilmCraft Demo");
+        let mut p = Project::new(DEMO_NAME);
         let seq = p.new_sequence("Main Edit", SequenceSettings::default(), 3, 3, None);
         (p, seq)
     })
 }
 
 fn build_demo(pool: &MediaPool) -> Option<(Project, ItemId)> {
-    let mut p = Project::new("FilmCraft Demo");
+    let mut p = Project::new(DEMO_NAME);
     let footage = p.add_bin("Footage", None);
     let audio_bin = p.add_bin("Audio", None);
     let gfx = p.add_bin("Graphics", None);

@@ -57,4 +57,4 @@ toml = "1"
 [features]
 # SimpleHub build: user-facing name "Simple Film", About dialog credits FilmCraft, no ArtCraft
 # marks or community links.
-simplehub = []
+simplehub = ["filmcraft-engine/simplehub"]
