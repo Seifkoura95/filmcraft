@@ -18,7 +18,14 @@
 //!
 //! The `AudioWorklet` script (`audio-worklet.js`) is loaded from next to the bundle:
 //! `bridge.assetBase` when the host sets it, else [`ASSET_BASE`].
+//!
+//! An optional `theme` string on the bridge (`"dark"` or `"light"`) picks the UI theme the app
+//! starts with; `FilmHandle::set_theme` switches it while the app runs. Both map onto the app's
+//! own Settings ▸ Appearance ▸ Color Theme values (`"dark"` is the app's Dark theme, `"light"`
+//! its Light theme; the default Darkest stays when the bridge says nothing) without saving them
+//! as the user's preference.
 
+use filmcraft_ui_egui::theme::ThemeKind;
 use filmcraft_ui_egui::{FilmcraftApp, RelinkHint};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -43,12 +50,40 @@ impl FilmHandle {
     pub fn has_panicked(&self) -> bool {
         self.runner.has_panicked()
     }
+
+    /// Switches the running app to `"dark"` or `"light"` on its next frame. Other values are
+    /// ignored.
+    pub fn set_theme(&self, theme: &str) {
+        if let Some(k) = parse_theme(theme) {
+            // `post` runs this before the frame's `logic` and asks for a repaint.
+            crate::post(move |web, ctx| crate::apply_theme(web, ctx, k));
+        }
+    }
 }
 
-/// Starts Simple Film on `canvas`, with `bridge` providing open and save.
+/// The bridge's theme names are the app's Color Theme setting values: `"dark"` is the Dark theme,
+/// `"light"` the Light one (`"darkest"`, the app's default, is accepted as well).
+fn parse_theme(theme: &str) -> Option<ThemeKind> {
+    match theme.trim().to_ascii_lowercase().as_str() {
+        "dark" => Some(ThemeKind::Medium),
+        "light" => Some(ThemeKind::Light),
+        "darkest" => Some(ThemeKind::Dark),
+        _ => None,
+    }
+}
+
+/// The bridge's optional `theme` property.
+fn bridge_theme(bridge: &JsValue) -> Option<ThemeKind> {
+    js_sys::Reflect::get(bridge, &JsValue::from_str("theme")).ok().and_then(|v| v.as_string()).and_then(|s| parse_theme(&s))
+}
+
+/// Starts Simple Film on `canvas`, with `bridge` providing open and save. An optional `theme`
+/// property (`"dark"` or `"light"`) on the bridge picks the initial theme; without it the app
+/// keeps its own default.
 #[wasm_bindgen]
 pub async fn start_simple_film(canvas: web_sys::HtmlCanvasElement, bridge: JsValue) -> Result<FilmHandle, JsValue> {
     eframe::WebLogger::init(log::LevelFilter::Info).ok();
+    let theme = bridge_theme(&bridge);
     let mut base = js_sys::Reflect::get(&bridge, &"assetBase".into()).ok().and_then(|v| v.as_string()).unwrap_or_else(|| ASSET_BASE.into());
     if !base.ends_with('/') {
         base.push('/');
@@ -74,6 +109,7 @@ pub async fn start_simple_film(canvas: web_sys::HtmlCanvasElement, bridge: JsVal
         webgl: false,
         recover: true,
         restore_media: true,
+        theme,
     };
     let runner = eframe::WebRunner::new();
     crate::boot(&runner, canvas, host).await?;

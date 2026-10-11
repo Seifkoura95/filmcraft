@@ -33,6 +33,7 @@ use std::sync::Arc;
 
 use filmcraft_engine::Session;
 use filmcraft_ui_egui::FilmcraftApp;
+use filmcraft_ui_egui::theme::ThemeKind;
 use serde_json::json;
 use wasm_bindgen::prelude::*;
 
@@ -58,6 +59,14 @@ pub fn repaint() {
             c.request_repaint();
         }
     });
+}
+
+/// Switch the UI theme of the running app, through the same path as `ui.set {theme}`: the
+/// Settings ▸ Appearance ▸ Color Theme setting changes and the frame applies it. The web build
+/// does not persist preferences, so the host's choice (SimpleHub's bridge) is for this run only.
+#[cfg_attr(not(feature = "simplehub"), allow(dead_code))]
+pub(crate) fn apply_theme(web: &mut WebApp, ctx: &egui::Context, k: ThemeKind) {
+    filmcraft_ui_egui::panels::settings::set_theme(&mut web.app, ctx, k);
 }
 
 /// Environment facts reported by `filmcraft.info()` (backend, isolation, codecs…).
@@ -126,6 +135,9 @@ pub(crate) struct Host {
     pub recover: bool,
     /// Register the media kept in OPFS by earlier sessions.
     pub restore_media: bool,
+    /// The UI theme to start with (SimpleHub's bridge `theme`), applied before the first frame;
+    /// `None` keeps the app's own default. Not saved as the user's preference.
+    pub theme: Option<ThemeKind>,
 }
 
 /// Starts the app on `canvas` with `runner`; resolves once it runs. Shared by the standalone
@@ -147,7 +159,7 @@ pub(crate) async fn boot(runner: &eframe::WebRunner, canvas: web_sys::HtmlCanvas
 
     api::install()?;
 
-    let Host { on_write, install_hooks, demo, cpu, webgl, .. } = host;
+    let Host { on_write, install_hooks, demo, cpu, webgl, theme, .. } = host;
     let mut web_options = eframe::WebOptions::default();
     // `?webgl`: WebGL2 only. The page reloads with it when starting on WebGPU fails (an adapter
     // whose device can't be created, a driver the browser rejects…); see `index.html`.
@@ -179,6 +191,11 @@ pub(crate) async fn boot(runner: &eframe::WebRunner, canvas: web_sys::HtmlCanvas
                     }
                 } else if demo {
                     let _ = session.execute("file.openDemoProject", json!({}));
+                }
+                if let Some(k) = theme {
+                    // The first frame's `apply_prefs` styles the UI from this setting, before
+                    // anything is drawn; nothing persists preferences in the web build.
+                    session.prefs.appearance.color_theme = k.pref_name().into();
                 }
                 let mut app = FilmcraftApp::new(session);
                 install_hooks(&mut app);
@@ -241,6 +258,7 @@ pub async fn start(canvas_id: String) -> Result<(), JsValue> {
         webgl: query_flag("webgl"),
         recover: !(query_flag("fresh") || query_flag("norecover")),
         restore_media: !query_flag("fresh"),
+        theme: None,
     };
     let runner = eframe::WebRunner::new();
     boot(&runner, canvas, host).await?;

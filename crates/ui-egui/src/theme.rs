@@ -296,7 +296,12 @@ fn add_craft_fonts(fonts: &mut FontDefinitions) {
 }
 
 pub fn apply_visuals(ctx: &egui::Context, t: &Tokens) {
-    let mut v = if t.kind == ThemeKind::Light { Visuals::light() } else { Visuals::dark() };
+    let light = t.kind == ThemeKind::Light;
+    // Pin egui's theme: it follows the system's `prefers-color-scheme` by default, and only the
+    // active mode is styled below, so a system theme change while the app is open would otherwise
+    // swap in the stock visuals of the other mode.
+    ctx.set_theme(if light { egui::Theme::Light } else { egui::Theme::Dark });
+    let mut v = if light { Visuals::light() } else { Visuals::dark() };
     v.panel_fill = t.panel_bg;
     v.window_fill = t.panel_bg;
     v.extreme_bg_color = t.field_bg;
